@@ -372,9 +372,13 @@ The jobs execution order is:
 - ``always-fail``
 - ``bye``
 
-Known limitations
-=================
+Validation
+==========
 
-You can create infinite loops if a nested part is calling itself or if 
-somewhere in the nested chain such a loop exists. Checkbox won't like that and 
-so far there's no validation to prevent it, be warned!
+Nested test plans must form a directed acyclic graph. A nested part cannot
+refer to itself, either directly or through another nested test plan. Reusing
+the same nested part from multiple test plans is supported.
+
+Run ``manage.py validate`` with all providers that contain referenced nested
+parts available to detect invalid nested test-plan cycles while developing a
+provider.

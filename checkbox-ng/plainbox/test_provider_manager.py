@@ -550,6 +550,32 @@ class ProviderManagerToolTests(TestCase):
             """),
         )
 
+    def test_validate__nested_test_plan_cycle(self):
+        filename = os.path.join(self.tmpdir, "units", "testplans.pxu")
+        with open(filename, "at", encoding="UTF-8") as stream:
+            print(file=stream)
+            print("unit: test plan", file=stream)
+            print("id: first", file=stream)
+            print("_name: First", file=stream)
+            print("include: dummy", file=stream)
+            print("nested_part: second", file=stream)
+            print(file=stream)
+            print("unit: test plan", file=stream)
+            print("id: second", file=stream)
+            print("_name: Second", file=stream)
+            print("include: dummy", file=stream)
+            print("nested_part: first", file=stream)
+        with TestIO() as test_io:
+            self.tool.main(["validate", "-N"])
+        self.assertIn("nested test-plan cycle detected", test_io.stdout)
+        self.assertIn(
+            "com.example::first -> com.example::second -> com.example::first",
+            test_io.stdout,
+        )
+        self.assertEqual(
+            test_io.stdout.count("nested test-plan cycle detected"), 1
+        )
+
     def test_validate__broken_wrong_field(self):
         """
         verify that ``validate -N`` shows information about incorrect

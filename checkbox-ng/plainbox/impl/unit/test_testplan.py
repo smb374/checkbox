@@ -31,7 +31,10 @@ from functools import partial
 from plainbox.abc import IProvider1, ITextSource
 from plainbox.impl.secure.origin import Origin
 from plainbox.impl.secure.qualifiers import OperatorMatcher, PatternMatcher
+from plainbox.impl.unit.testplan_graph import find_nested_test_plan_cycles
 from plainbox.impl.unit.testplan import TestPlanUnit, TestPlanUnitSupport
+from plainbox.impl.unit.validators import UnitValidationContext
+from plainbox.impl.validation import Problem, Severity
 from plainbox.vendor import mock
 
 
@@ -589,6 +592,110 @@ class TestNestedTestPlan(TestCase):
         self.assertIsInstance(qual_list[1].matcher, OperatorMatcher)
         self.assertEqual(qual_list[1].matcher.value, "ns2::Bar")
         self.assertEqual(qual_list[1].inclusive, True)
+
+
+class TestNestedTestPlanValidation(TestCase):
+
+    def setUp(self):
+        self.provider1 = mock.Mock(name="provider1", spec_set=IProvider1)
+        self.provider1.namespace = "ns1"
+        self.provider2 = mock.Mock(name="provider2", spec_set=IProvider1)
+        self.provider2.namespace = "ns2"
+        self.provider1.unit_list = []
+        self.provider2.unit_list = []
+
+    def make_plan(self, provider, plan_id, nested_part=None):
+        data = {
+            "id": plan_id,
+            "unit": "test plan",
+            "name": "Test plan {}".format(plan_id),
+            "include": "# no jobs",
+        }
+        if nested_part is not None:
+            data["nested_part"] = nested_part
+        plan = TestPlanUnit(data, provider=provider)
+        provider.unit_list.append(plan)
+        return plan
+
+    def test_find_cycles__skips_simple_plans(self):
+        simple_plan = self.make_plan(self.provider1, "simple")
+
+        cycles = find_nested_test_plan_cycles([self.provider1], [simple_plan])
+
+        self.assertEqual(cycles, [])
+
+    def test_find_cycles__allows_shared_nested_plan(self):
+        child = self.make_plan(self.provider1, "child")
+        first = self.make_plan(self.provider1, "first", ["child"])
+        second = self.make_plan(self.provider1, "second", ["child"])
+
+        cycles = find_nested_test_plan_cycles(
+            [self.provider1], [first, second]
+        )
+
+        self.assertEqual(cycles, [])
+
+    def test_find_cycles__detects_cross_provider_cycle(self):
+        first = self.make_plan(self.provider1, "first", ["ns2::second"])
+        self.make_plan(self.provider2, "second", ["ns1::first"])
+
+        cycles = find_nested_test_plan_cycles(
+            [self.provider1, self.provider2], [first]
+        )
+
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(
+            cycles[0].path,
+            ("ns1::first", "ns2::second", "ns1::first"),
+        )
+
+    def test_find_cycles__ignores_unreachable_cycle(self):
+        root = self.make_plan(self.provider1, "root")
+        first = self.make_plan(self.provider2, "first", ["second"])
+        self.make_plan(self.provider2, "second", ["first"])
+
+        cycles = find_nested_test_plan_cycles(
+            [self.provider1, self.provider2], [root]
+        )
+
+        self.assertEqual(cycles, [])
+
+    def test_find_cycles__reports_each_cycle_once(self):
+        first = self.make_plan(self.provider1, "first", ["second"])
+        second = self.make_plan(self.provider1, "second", ["third"])
+        third = self.make_plan(self.provider1, "third", ["first"])
+
+        cycles = find_nested_test_plan_cycles(
+            [self.provider1], [first, second, third]
+        )
+
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(
+            cycles[0].path,
+            ("ns1::first", "ns1::second", "ns1::third", "ns1::first"),
+        )
+
+    def test_contextual_validation__reports_cycle(self):
+        first = self.make_plan(self.provider1, "first", ["second"])
+        self.make_plan(self.provider1, "second", ["first"])
+        context = UnitValidationContext(
+            [self.provider1], root_unit_list=self.provider1.unit_list
+        )
+
+        issue_list = first.check(context=context)
+
+        issue_list = [
+            issue for issue in issue_list if issue.field == "nested_part"
+        ]
+        self.assertEqual(len(issue_list), 1)
+        self.assertEqual(issue_list[0].severity, Severity.error)
+        self.assertEqual(issue_list[0].kind, Problem.bad_reference)
+        self.assertEqual(
+            issue_list[0].message,
+            "test plan 'first', field 'nested_part', "
+            "nested test-plan cycle detected: "
+            "ns1::first -> ns1::second -> ns1::first",
+        )
 
 
 class TestTestPlanUnitSupport(TestCase):

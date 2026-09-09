@@ -184,9 +184,11 @@ copy such constructs when working on a new test plan from scratch
 .. option:: nested_part
 
    A multi-line list of test-plan identifiers whose contents will become part
-   of this test-plan. This is a method of creating a tree of test plans,
+   of this test-plan. This is a method of creating a directed acyclic graph of
+   test plans,
    something that can be useful for organization and de-duplication of test plan
-   definitions. For a full discussion of this capability see
+   definitions. The same nested part can be used by more than one test plan,
+   but cycles are not allowed. For a full discussion of this capability see
    :ref:`nested-test-plan`.
 
 .. option:: exclude

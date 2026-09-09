@@ -1236,7 +1236,9 @@ class ValidateCommand(ManageCommand):
         _logger.info(_("Validating everything..."))
         unit_list, exc_list = self.collect_all_units(provider)
         early_issue_gen = self.get_early_issues(exc_list)
-        context = UnitValidationContext(provider_list)
+        context = UnitValidationContext(
+            provider_list, root_unit_list=unit_list
+        )
         issue_gen = self.validate_units_in_context(context, unit_list)
         del context
         failed = False

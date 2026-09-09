@@ -40,6 +40,7 @@ from plainbox.impl.secure.qualifiers import (
 )
 from plainbox.impl.symbol import SymbolDef
 from plainbox.impl.unit import concrete_validators, get_array_field_qualify
+from plainbox.impl.unit.testplan_graph import find_nested_test_plan_cycles
 from plainbox.impl.unit.unit_with_id import UnitWithId
 from plainbox.impl.unit.validators import (
     DeprecatedSchemaValidator,
@@ -109,6 +110,7 @@ class NoBaseIncludeValidator(FieldValidatorBase):
                     included_job_id.append(target_id)
             else:
                 raise NotImplementedError
+
         # Now check that mandatory field patterns do not select a job already
         # included with normal include.
         qual_gen = unit._gen_qualifiers(
@@ -142,6 +144,28 @@ class NoBaseIncludeValidator(FieldValidatorBase):
                     )
             else:
                 raise NotImplementedError
+
+
+class NestedPartCycleValidator(FieldValidatorBase):
+    """Ensure nested test plans reachable from this provider are acyclic."""
+
+    def check_in_context(self, parent, unit, field, context):
+        cycle_list = context.compute_shared(
+            "testplan.nested_part.cycles",
+            find_nested_test_plan_cycles,
+            context.provider_list,
+            context.root_unit_list,
+        )
+        for cycle in cycle_list:
+            if cycle.root is unit:
+                yield parent.error(
+                    unit,
+                    field,
+                    Problem.bad_reference,
+                    _("nested test-plan cycle detected: {}").format(
+                        " -> ".join(cycle.path)
+                    ),
+                )
 
 
 class TestPlanUnit(UnitWithId):
@@ -654,6 +678,9 @@ class TestPlanUnit(UnitWithId):
                 DeprecatedSchemaValidator(
                     Problem.deprecated, Severity.warning, str, list
                 ),
+            ],
+            fields.nested_part: [
+                NestedPartCycleValidator(),
             ],
             fields.setup_include: [
                 NoBaseIncludeValidator(),
