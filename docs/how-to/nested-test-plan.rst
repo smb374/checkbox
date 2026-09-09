@@ -382,3 +382,7 @@ the same nested part from multiple test plans is supported.
 Run ``manage.py validate`` with all providers that contain referenced nested
 parts available to detect invalid nested test-plan cycles while developing a
 provider.
+
+If malformed nested-part data reaches Checkbox without validation, the invalid
+entries are ignored and Checkbox logs a warning. Treat that warning as an
+invalid provider definition and run ``manage.py validate`` to identify it.

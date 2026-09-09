@@ -306,6 +306,7 @@ def test_malformed_nested_part_is_rejected_cleanly(
         ),
     )
     assert _error_count(result) == 1, result.output
+    assert "ignoring invalid nested_part" in result.output
 
 
 @pytest.mark.integration

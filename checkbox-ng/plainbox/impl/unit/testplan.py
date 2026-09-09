@@ -161,7 +161,7 @@ class NestedPartCycleValidator(FieldValidatorBase):
             context.root_unit_list,
         )
         for cycle in cycle_list:
-            if cycle.root is unit:
+            if cycle.owner is unit:
                 yield parent.error(
                     unit,
                     field,
@@ -355,25 +355,31 @@ class TestPlanUnit(UnitWithId):
     def get_nested_part(self):
         """Compute and return a set of test plan ids from nested_part field."""
         nested_parts = []
-        if is_valid_nested_part(
-            self.nested_part, is_yaml_origin(self.origin)
-        ) and (self.nested_part is not None):
-            from plainbox.impl.session import SessionManager
+        nested_part = self.nested_part
+        if nested_part is None:
+            return nested_parts
+        if not is_valid_nested_part(nested_part, is_yaml_origin(self.origin)):
+            logger.warning(
+                _(
+                    "ignoring invalid nested_part on test plan %s: "
+                    "expected a list of test-plan identifiers"
+                ),
+                self.id,
+            )
+            return nested_parts
 
-            with SessionManager.get_throwaway_manager(self.provider_list) as m:
-                context = m.default_device_context
-                testplan_ids = get_array_field_qualify(
-                    self.nested_part, "nested_part", self.qualify_id, logger
-                )
-                for tp_id in testplan_ids:
-                    try:
-                        nested_parts.append(
-                            context.get_unit(tp_id, "test plan")
-                        )
-                    except KeyError:
-                        logger.warning(
-                            _("unable to find nested part: %s"), tp_id
-                        )
+        from plainbox.impl.session import SessionManager
+
+        with SessionManager.get_throwaway_manager(self.provider_list) as m:
+            context = m.default_device_context
+            testplan_ids = get_array_field_qualify(
+                nested_part, "nested_part", self.qualify_id, logger
+            )
+            for tp_id in testplan_ids:
+                try:
+                    nested_parts.append(context.get_unit(tp_id, "test plan"))
+                except KeyError:
+                    logger.warning(_("unable to find nested part: %s"), tp_id)
         return nested_parts
 
     @instance_method_lru_cache(maxsize=None)

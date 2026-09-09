@@ -29,7 +29,7 @@ logger = logging.getLogger("plainbox.unit.testplan_graph")
 
 
 NestedTestPlanCycle = collections.namedtuple(
-    "NestedTestPlanCycle", "root path"
+    "NestedTestPlanCycle", "owner path"
 )
 
 
@@ -135,14 +135,33 @@ def find_nested_test_plan_cycles(provider_list, root_list):
                     for index, trail_unit in enumerate(trail)
                     if trail_unit.id == child.id
                 )
-                path = tuple(trail_unit.id for trail_unit in trail[start:])
-                path = _canonicalize_cycle(path)
+                cycle_units = _canonicalize_cycle_units(trail[start:])
+                path = tuple(cycle_unit.id for cycle_unit in cycle_units)
                 if path not in seen_cycles:
                     seen_cycles.add(path)
-                    cycles.append(NestedTestPlanCycle(root, path + (path[0],)))
+                    owner = next(
+                        (
+                            cycle_unit
+                            for cycle_unit in cycle_units
+                            if any(
+                                cycle_unit is root_unit
+                                for root_unit in root_list
+                            )
+                        ),
+                        root,
+                    )
+                    cycles.append(
+                        NestedTestPlanCycle(owner, path + (path[0],))
+                    )
     return cycles
 
 
-def _canonicalize_cycle(path):
-    """Return *path* rotated so that it has a stable starting point."""
-    return min(path[index:] + path[:index] for index in range(len(path)))
+def _canonicalize_cycle_units(unit_list):
+    """Return cycle units rotated to a stable starting point."""
+    return min(
+        (
+            unit_list[index:] + unit_list[:index]
+            for index in range(len(unit_list))
+        ),
+        key=lambda path: tuple(unit.id for unit in path),
+    )

@@ -661,6 +661,7 @@ class TestNestedTestPlanValidation(TestCase):
             cycles[0].path,
             ("ns1::first", "ns2::second", "ns1::first"),
         )
+        self.assertIs(cycles[0].owner, first)
 
     def test_find_cycles__ignores_unreachable_cycle(self):
         root = self.make_plan(self.provider1, "root")
@@ -707,6 +708,33 @@ class TestNestedTestPlanValidation(TestCase):
             cycles[0].path,
             ("ns1::first", "ns1::second", "ns1::third", "ns1::first"),
         )
+        self.assertIs(cycles[0].owner, first)
+
+    def test_find_cycles__owns_downstream_cycle(self):
+        entry = self.make_plan(self.provider1, "entry", ["first"])
+        first = self.make_plan(self.provider1, "first", ["second"])
+        self.make_plan(self.provider1, "second", ["first"])
+
+        cycles = find_nested_test_plan_cycles([self.provider1], [entry, first])
+
+        self.assertEqual(len(cycles), 1)
+        self.assertIs(cycles[0].owner, first)
+        self.assertEqual(
+            cycles[0].path,
+            ("ns1::first", "ns1::second", "ns1::first"),
+        )
+
+    def test_find_cycles__uses_entry_for_external_cycle(self):
+        entry = self.make_plan(self.provider1, "entry", ["ns2::first"])
+        self.make_plan(self.provider2, "first", ["second"])
+        self.make_plan(self.provider2, "second", ["first"])
+
+        cycles = find_nested_test_plan_cycles(
+            [self.provider1, self.provider2], [entry]
+        )
+
+        self.assertEqual(len(cycles), 1)
+        self.assertIs(cycles[0].owner, entry)
 
     def test_contextual_validation__reports_cycle(self):
         first = self.make_plan(self.provider1, "first", ["second"])
@@ -730,6 +758,21 @@ class TestNestedTestPlanValidation(TestCase):
             "ns1::first -> ns1::second -> ns1::first",
         )
 
+    def test_contextual_validation__owns_downstream_cycle(self):
+        entry = self.make_plan(self.provider1, "entry", ["first"])
+        first = self.make_plan(self.provider1, "first", ["second"])
+        self.make_plan(self.provider1, "second", ["first"])
+        context = UnitValidationContext(
+            [self.provider1], root_unit_list=self.provider1.unit_list
+        )
+
+        entry_issues = entry.check(context=context)
+        first_issues = first.check(context=context)
+
+        self.assertEqual(entry_issues, [])
+        self.assertEqual(len(first_issues), 1)
+        self.assertEqual(first_issues[0].field, "nested_part")
+
     def test_contextual_validation__rejects_invalid_yaml_nested_part(self):
         plan = self.make_yaml_plan(self.provider1, "invalid", ["child", 1])
         self.provider1.unit_list.append(plan)
@@ -752,7 +795,16 @@ class TestNestedTestPlanValidation(TestCase):
         plan = self.make_yaml_plan(self.provider1, "invalid", ["child", 1])
         self.provider1.unit_list.append(plan)
 
-        self.assertEqual(plan.get_nested_part(), [])
+        with self.assertLogs("plainbox.unit.testplan", "WARNING") as logs:
+            self.assertEqual(plan.get_nested_part(), [])
+            self.assertEqual(plan.get_nested_part(), [])
+
+        self.assertEqual(len(logs.output), 1)
+        self.assertIn("ignoring invalid nested_part", logs.output[0])
+        self.assertIn("ns1::invalid", logs.output[0])
+        self.assertIn(
+            "expected a list of test-plan identifiers", logs.output[0]
+        )
 
     def test_contextual_validation__allows_simple_yaml_plan(self):
         plan = TestPlanUnit(
