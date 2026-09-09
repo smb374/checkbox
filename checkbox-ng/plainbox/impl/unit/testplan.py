@@ -168,6 +168,27 @@ class NestedPartCycleValidator(FieldValidatorBase):
                 )
 
 
+class NestedPartValueValidator(FieldValidatorBase):
+    """Ensure YAML nested parts are lists of test-plan identifiers."""
+
+    def check(self, parent, unit, field):
+        value = getattr(unit, str(field))
+        if (
+            value is not None
+            and unit.origin.yaml
+            and (
+                not isinstance(value, list)
+                or not all(isinstance(item, str) for item in value)
+            )
+        ):
+            yield parent.error(
+                unit,
+                field,
+                Problem.wrong,
+                _("expected a list of test-plan identifiers"),
+            )
+
+
 class TestPlanUnit(UnitWithId):
     """
     Test plan class
@@ -680,6 +701,7 @@ class TestPlanUnit(UnitWithId):
                 ),
             ],
             fields.nested_part: [
+                NestedPartValueValidator(),
                 NestedPartCycleValidator(),
             ],
             fields.setup_include: [

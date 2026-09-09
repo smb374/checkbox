@@ -29,7 +29,7 @@ from unittest import TestCase
 from functools import partial
 
 from plainbox.abc import IProvider1, ITextSource
-from plainbox.impl.secure.origin import Origin
+from plainbox.impl.secure.origin import FileTextSource, Origin
 from plainbox.impl.secure.qualifiers import OperatorMatcher, PatternMatcher
 from plainbox.impl.unit.testplan_graph import find_nested_test_plan_cycles
 from plainbox.impl.unit.testplan import TestPlanUnit, TestPlanUnitSupport
@@ -617,6 +617,19 @@ class TestNestedTestPlanValidation(TestCase):
         provider.unit_list.append(plan)
         return plan
 
+    def make_yaml_plan(self, provider, plan_id, nested_part):
+        return TestPlanUnit(
+            {
+                "id": plan_id,
+                "unit": "test plan",
+                "name": "Test plan {}".format(plan_id),
+                "include": [],
+                "nested_part": nested_part,
+            },
+            provider=provider,
+            origin=Origin(FileTextSource("test.yaml"), 1, 6),
+        )
+
     def test_find_cycles__skips_simple_plans(self):
         simple_plan = self.make_plan(self.provider1, "simple")
 
@@ -660,6 +673,26 @@ class TestNestedTestPlanValidation(TestCase):
 
         self.assertEqual(cycles, [])
 
+    def test_find_cycles__uses_root_units_over_provider_units(self):
+        installed_first = self.make_plan(self.provider1, "first", ["second"])
+        self.make_plan(self.provider1, "second")
+        local_provider = mock.Mock(name="local_provider", spec_set=IProvider1)
+        local_provider.namespace = "ns1"
+        local_provider.unit_list = []
+        local_first = self.make_plan(local_provider, "first", ["second"])
+        self.make_plan(local_provider, "second", ["first"])
+
+        cycles = find_nested_test_plan_cycles(
+            [self.provider1], local_provider.unit_list
+        )
+
+        self.assertIsNot(installed_first, local_first)
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(
+            cycles[0].path,
+            ("ns1::first", "ns1::second", "ns1::first"),
+        )
+
     def test_find_cycles__reports_each_cycle_once(self):
         first = self.make_plan(self.provider1, "first", ["second"])
         second = self.make_plan(self.provider1, "second", ["third"])
@@ -695,6 +728,49 @@ class TestNestedTestPlanValidation(TestCase):
             "test plan 'first', field 'nested_part', "
             "nested test-plan cycle detected: "
             "ns1::first -> ns1::second -> ns1::first",
+        )
+
+    def test_contextual_validation__rejects_invalid_yaml_nested_part(self):
+        plan = self.make_yaml_plan(self.provider1, "invalid", ["child", 1])
+        self.provider1.unit_list.append(plan)
+        context = UnitValidationContext(
+            [self.provider1], root_unit_list=self.provider1.unit_list
+        )
+
+        issue_list = plan.check(context=context)
+
+        issue_list = [
+            issue for issue in issue_list if issue.field == "nested_part"
+        ]
+        self.assertEqual(len(issue_list), 1)
+        self.assertEqual(issue_list[0].severity, Severity.error)
+        self.assertEqual(issue_list[0].kind, Problem.wrong)
+        self.assertEqual(
+            issue_list[0].message,
+            "test plan 'invalid', field 'nested_part', "
+            "expected a list of test-plan identifiers",
+        )
+
+    def test_contextual_validation__allows_simple_yaml_plan(self):
+        plan = TestPlanUnit(
+            {
+                "id": "simple",
+                "unit": "test plan",
+                "name": "Simple test plan",
+                "include": [],
+            },
+            provider=self.provider1,
+            origin=Origin(FileTextSource("test.yaml"), 1, 4),
+        )
+        self.provider1.unit_list.append(plan)
+        context = UnitValidationContext(
+            [self.provider1], root_unit_list=self.provider1.unit_list
+        )
+
+        issue_list = plan.check(context=context)
+
+        self.assertEqual(
+            [issue for issue in issue_list if issue.field == "nested_part"], []
         )
 
 

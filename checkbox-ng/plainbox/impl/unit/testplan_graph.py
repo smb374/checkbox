@@ -42,14 +42,26 @@ def find_nested_test_plan_cycles(provider_list, root_list):
         for unit in provider.unit_list:
             if hasattr(unit, "id") and unit.id is not None:
                 id_map[unit.id].append(unit)
+    for unit in root_list:
+        if hasattr(unit, "id") and unit.id is not None:
+            id_map[unit.id] = [unit]
 
     adjacency = {}
 
     def get_children(unit):
         if unit.id not in adjacency:
             children = []
+            nested_part = unit.nested_part
+            if not isinstance(nested_part, (str, list)):
+                adjacency[unit.id] = children
+                return children
+            if isinstance(nested_part, list) and not all(
+                isinstance(unit_id, str) for unit_id in nested_part
+            ):
+                adjacency[unit.id] = children
+                return children
             for unit_id in get_array_field_qualify(
-                unit.nested_part, "nested_part", unit.qualify_id, logger
+                nested_part, "nested_part", unit.qualify_id, logger
             ):
                 candidates = id_map.get(unit_id, ())
                 if (

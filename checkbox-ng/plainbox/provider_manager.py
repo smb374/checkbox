@@ -1220,9 +1220,12 @@ class ValidateCommand(ManageCommand):
             validate=False, check=False
         )
         all_providers.load()
-        provider_list = all_providers.get_all_plugin_objects()
-        if all(p.name != provider.name for p in provider_list):
-            provider_list.append(provider)
+        provider_list = [
+            candidate
+            for candidate in all_providers.get_all_plugin_objects()
+            if candidate.name != provider.name
+        ]
+        provider_list.append(provider)
         # Add the built-in 'categories' provider,
         # unless that's the one we're testing
         categories_provider = get_categories()

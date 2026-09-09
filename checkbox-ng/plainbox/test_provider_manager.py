@@ -566,7 +566,8 @@ class ProviderManagerToolTests(TestCase):
             print("include: dummy", file=stream)
             print("nested_part: first", file=stream)
         with TestIO() as test_io:
-            self.tool.main(["validate", "-N"])
+            status = self.tool.main(["validate", "-N"])
+        self.assertEqual(status, 1)
         self.assertIn("nested test-plan cycle detected", test_io.stdout)
         self.assertIn(
             "com.example::first -> com.example::second -> com.example::first",
@@ -575,6 +576,28 @@ class ProviderManagerToolTests(TestCase):
         self.assertEqual(
             test_io.stdout.count("nested test-plan cycle detected"), 1
         )
+        self.assertNotIn("RecursionError", test_io.stdout)
+        self.assertNotIn("Traceback", test_io.stdout)
+
+    def test_validate__invalid_yaml_nested_part(self):
+        filename = os.path.join(self.tmpdir, "units", "testplans.yaml")
+        with open(filename, "wt", encoding="UTF-8") as stream:
+            print("unit: test plan", file=stream)
+            print("id: invalid", file=stream)
+            print("name: Invalid", file=stream)
+            print("include: []", file=stream)
+            print("nested_part:", file=stream)
+            print("  - child", file=stream)
+            print("  - 1", file=stream)
+        with TestIO() as test_io:
+            status = self.tool.main(["validate", "-N"])
+        self.assertEqual(status, 1)
+        self.assertIn("field 'nested_part'", test_io.stdout)
+        self.assertIn(
+            "expected a list of test-plan identifiers", test_io.stdout
+        )
+        self.assertNotIn("TypeError", test_io.stdout)
+        self.assertNotIn("Traceback", test_io.stdout)
 
     def test_validate__broken_wrong_field(self):
         """
