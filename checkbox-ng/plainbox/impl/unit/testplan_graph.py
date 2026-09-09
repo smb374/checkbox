@@ -18,7 +18,11 @@ import logging
 
 from plainbox.impl.unit import get_array_field_qualify
 
-__all__ = ["find_nested_test_plan_cycles"]
+__all__ = [
+    "find_nested_test_plan_cycles",
+    "is_valid_nested_part",
+    "is_yaml_origin",
+]
 
 
 logger = logging.getLogger("plainbox.unit.testplan_graph")
@@ -27,6 +31,26 @@ logger = logging.getLogger("plainbox.unit.testplan_graph")
 NestedTestPlanCycle = collections.namedtuple(
     "NestedTestPlanCycle", "root path"
 )
+
+
+def is_yaml_origin(origin):
+    """Check if an origin has a YAML filename."""
+    filename = getattr(getattr(origin, "source", None), "filename", "")
+    return filename.endswith((".yaml", ".yml"))
+
+
+def is_valid_nested_part(value, is_yaml):
+    """Check if a nested_part value uses a supported representation."""
+    if value is None:
+        return True
+    if is_yaml:
+        return isinstance(value, list) and all(
+            isinstance(item, str) for item in value
+        )
+    return isinstance(value, str) or (
+        isinstance(value, list)
+        and all(isinstance(item, str) for item in value)
+    )
 
 
 def find_nested_test_plan_cycles(provider_list, root_list):
@@ -52,11 +76,8 @@ def find_nested_test_plan_cycles(provider_list, root_list):
         if unit.id not in adjacency:
             children = []
             nested_part = unit.nested_part
-            if not isinstance(nested_part, (str, list)):
-                adjacency[unit.id] = children
-                return children
-            if isinstance(nested_part, list) and not all(
-                isinstance(unit_id, str) for unit_id in nested_part
+            if not is_valid_nested_part(
+                nested_part, is_yaml_origin(unit.origin)
             ):
                 adjacency[unit.id] = children
                 return children

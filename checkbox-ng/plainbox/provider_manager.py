@@ -1229,12 +1229,18 @@ class ValidateCommand(ManageCommand):
         # Add the built-in 'categories' provider,
         # unless that's the one we're testing
         categories_provider = get_categories()
-        if provider.base_dir != categories_provider.base_dir:
+        if (
+            provider.name != categories_provider.name
+            and provider.base_dir != categories_provider.base_dir
+        ):
             provider_list.append(categories_provider)
         # Add the built-in 'manifest' provider,
         # unless that's the one we're testing
         manifest_provider = get_manifest()
-        if provider.base_dir != manifest_provider.base_dir:
+        if (
+            provider.name != manifest_provider.name
+            and provider.base_dir != manifest_provider.base_dir
+        ):
             provider_list.append(manifest_provider)
         _logger.info(_("Validating everything..."))
         unit_list, exc_list = self.collect_all_units(provider)

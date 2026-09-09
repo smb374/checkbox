@@ -40,7 +40,11 @@ from plainbox.impl.secure.qualifiers import (
 )
 from plainbox.impl.symbol import SymbolDef
 from plainbox.impl.unit import concrete_validators, get_array_field_qualify
-from plainbox.impl.unit.testplan_graph import find_nested_test_plan_cycles
+from plainbox.impl.unit.testplan_graph import (
+    find_nested_test_plan_cycles,
+    is_valid_nested_part,
+    is_yaml_origin,
+)
 from plainbox.impl.unit.unit_with_id import UnitWithId
 from plainbox.impl.unit.validators import (
     DeprecatedSchemaValidator,
@@ -173,14 +177,7 @@ class NestedPartValueValidator(FieldValidatorBase):
 
     def check(self, parent, unit, field):
         value = getattr(unit, str(field))
-        if (
-            value is not None
-            and unit.origin.yaml
-            and (
-                not isinstance(value, list)
-                or not all(isinstance(item, str) for item in value)
-            )
-        ):
+        if not is_valid_nested_part(value, is_yaml_origin(unit.origin)):
             yield parent.error(
                 unit,
                 field,
@@ -358,7 +355,9 @@ class TestPlanUnit(UnitWithId):
     def get_nested_part(self):
         """Compute and return a set of test plan ids from nested_part field."""
         nested_parts = []
-        if self.nested_part is not None:
+        if is_valid_nested_part(
+            self.nested_part, is_yaml_origin(self.origin)
+        ) and (self.nested_part is not None):
             from plainbox.impl.session import SessionManager
 
             with SessionManager.get_throwaway_manager(self.provider_list) as m:

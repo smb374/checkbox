@@ -83,17 +83,17 @@ class UnitValidationContext(pod.POD):
         assign_filter_list=[pod.typed, pod.typed.sequence(IProvider1)],
     )
 
-    root_unit_list = pod.Field(
-        "units that are the roots of this validation run",
-        list,
-        initial_fn=list,
-        assign_filter_list=[pod.typed],
-    )
-
     shared_cache = pod.Field(
         "cached computations",
         dict,
         initial_fn=dict,
+        assign_filter_list=[pod.typed],
+    )
+
+    root_unit_list = pod.Field(
+        "units that are the roots of this validation run",
+        list,
+        initial_fn=list,
         assign_filter_list=[pod.typed],
     )
 

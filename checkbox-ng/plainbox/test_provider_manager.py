@@ -39,6 +39,7 @@ from plainbox.provider_manager import (
     ManageCommand,
     ProviderManagerTool,
     TestCommand,
+    ValidateCommand,
     create_subprocess_test,
     manage_py_extension,
 )
@@ -175,6 +176,49 @@ class ProviderManagerToolTests(TestCase):
     """
 
     maxDiff = None
+
+    @patch("plainbox.provider_manager.UnitValidationContext")
+    @patch("plainbox.provider_manager.get_manifest")
+    @patch("plainbox.provider_manager.get_categories")
+    @patch("plainbox.provider_manager.InsecureProvider1PlugInCollection")
+    def test_validate__local_provider_takes_precedence_over_builtins(
+        self,
+        mock_collection_cls,
+        mock_get_categories,
+        mock_get_manifest,
+        mock_context_cls,
+    ):
+        provider = MagicMock(name="provider")
+        provider.name = "com.canonical.plainbox:categories"
+        provider.base_dir = "/local/categories"
+        discovered = MagicMock(name="discovered")
+        discovered.name = provider.name
+        unrelated = MagicMock(name="unrelated")
+        unrelated.name = "com.example:unrelated"
+        categories = MagicMock(name="categories")
+        categories.name = provider.name
+        categories.base_dir = "/builtin/categories"
+        manifest = MagicMock(name="manifest")
+        manifest.name = "com.canonical.plainbox:manifest"
+        manifest.base_dir = "/builtin/manifest"
+        collection = mock_collection_cls.return_value
+        collection.get_all_plugin_objects.return_value = [
+            discovered,
+            unrelated,
+        ]
+        mock_get_categories.return_value = categories
+        mock_get_manifest.return_value = manifest
+        command = MagicMock()
+        command.get_provider.return_value = provider
+        command.collect_all_units.return_value = ([], [])
+        command.get_early_issues.return_value = ()
+        command.validate_units_in_context.return_value = ()
+        ns = MagicMock(strict=False, deprecated=False)
+
+        ValidateCommand.invoked_new(command, ns)
+
+        provider_list = mock_context_cls.call_args[0][0]
+        self.assertEqual(provider_list, [unrelated, provider, manifest])
 
     def test_help(self):
         """

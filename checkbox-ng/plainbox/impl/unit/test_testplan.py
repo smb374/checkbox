@@ -739,9 +739,6 @@ class TestNestedTestPlanValidation(TestCase):
 
         issue_list = plan.check(context=context)
 
-        issue_list = [
-            issue for issue in issue_list if issue.field == "nested_part"
-        ]
         self.assertEqual(len(issue_list), 1)
         self.assertEqual(issue_list[0].severity, Severity.error)
         self.assertEqual(issue_list[0].kind, Problem.wrong)
@@ -750,6 +747,12 @@ class TestNestedTestPlanValidation(TestCase):
             "test plan 'invalid', field 'nested_part', "
             "expected a list of test-plan identifiers",
         )
+
+    def test_get_nested_part__ignores_invalid_yaml_nested_part(self):
+        plan = self.make_yaml_plan(self.provider1, "invalid", ["child", 1])
+        self.provider1.unit_list.append(plan)
+
+        self.assertEqual(plan.get_nested_part(), [])
 
     def test_contextual_validation__allows_simple_yaml_plan(self):
         plan = TestPlanUnit(

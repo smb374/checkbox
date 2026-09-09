@@ -27,6 +27,7 @@ from textwrap import dedent
 from unittest import TestCase
 from unittest.mock import MagicMock
 
+from plainbox.abc import IProvider1
 from plainbox.impl.unit.validators import (
     CorrectFieldValueValidator,
     DeprecatedFieldValidator,
@@ -37,7 +38,9 @@ from plainbox.impl.unit.validators import (
     TemplateVariantFieldValidator,
     UniqueValueValidator,
     UnitReferenceValidator,
+    UnitValidationContext,
 )
+from plainbox.vendor import mock
 
 
 class NoTestsForAllThatCode(TestCase):
@@ -99,3 +102,24 @@ class OverrideFieldValueValidatorTests(TestCase):
         self.assertTrue(
             xfail_validators.check(parent, testplan, "xfail_overrides")
         )
+
+
+class UnitValidationContextTests(TestCase):
+    def setUp(self):
+        self.provider = mock.Mock(spec_set=IProvider1)
+
+    def test_positional_shared_cache_is_compatible(self):
+        cache = {}
+
+        context = UnitValidationContext([self.provider], cache)
+
+        self.assertIs(context.shared_cache, cache)
+        self.assertEqual(context.root_unit_list, [])
+
+    def test_root_unit_list_is_keyword_only_in_practice(self):
+        roots = []
+
+        context = UnitValidationContext([self.provider], root_unit_list=roots)
+
+        self.assertIs(context.root_unit_list, roots)
+        self.assertEqual(context.shared_cache, {})
